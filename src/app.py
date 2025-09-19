@@ -322,8 +322,10 @@ def simple_qa_mode():
                     answer = agent.get_simple_answer(question)
                     
                     st.subheader("💡 建议方案")
-                    st.markdown(f'<div class="solution-box">{answer}</div>', 
-                               unsafe_allow_html=True)
+                    # st.markdown(f'<div class="solution-box">{answer}</div>', 
+                    #            unsafe_allow_html=True)
+                    with st.chat_message("assistant"):
+                        st.write_stream(agent.rag_chain.stream(question)) 
                     
                     # 显示相关案例
                     relevant_cases = agent.rag_chain.get_relevant_cases(question, k=3)
@@ -404,21 +406,21 @@ def conversation_mode():
                 with st.spinner("正在生成回答..."):
                     conv_rag = load_conversational_rag()
                     if conv_rag:
-                        answer = conv_rag.chat(question)
+                        with st.chat_message("assistant"):
+                            st.write_stream(conv_rag.stream_chat(question))
                         
-                        # 添加到对话历史
+                        # 添加到对话历史（由流式方法内部更新，这里只读取最新历史以显示简短摘要）
+                        if st.session_state.get("chat_history") is None:
+                            st.session_state.chat_history = []
                         st.session_state.chat_history.append({
                             "question": question,
-                            "answer": answer,
+                            "answer": "(以上为流式输出)",
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         })
                         
-                        # 显示最新回答
-                        st.subheader("💡 最新回答")
-                        st.markdown(f'<div class="solution-box">{answer}</div>', 
-                                   unsafe_allow_html=True)
-                        
                         # 清空输入框
+                        st.rerun()
+# 清空输入框
                         st.rerun()
             else:
                 st.warning("请输入问题")

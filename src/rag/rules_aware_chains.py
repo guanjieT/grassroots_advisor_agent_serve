@@ -2,7 +2,7 @@
 法规感知的RAG链
 结合法规政策和案例数据提供合规建议
 """
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Generator, Tuple
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser

@@ -2,6 +2,7 @@
 基层工作智能辅助Agent - FastAPI接口
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
@@ -388,3 +389,27 @@ if __name__ == "__main__":
         reload=config.APP_DEBUG,
         log_level=config.LOG_LEVEL.lower()
     ) 
+
+@app.post("/api/stream/simple-answer", summary="简单问答（流式）", description="流式输出的简单问答，返回text/plain流")
+async def simple_answer_stream(request: QuestionRequest):
+    try:
+        agent = await get_agent()
+        chain = agent.rag_chain
+        def gen():
+            for chunk in chain.stream(request.question):
+                yield str(chunk)
+        return StreamingResponse(gen(), media_type="text/plain")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"简单问答流式失败: {e}")
+
+@app.post("/api/stream/chat", summary="对话聊天（流式）", description="流式输出的多轮对话，返回text/plain流")
+async def chat_stream(request: ChatRequest):
+    try:
+        session_id = request.session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        conv_rag = get_conversation_session(session_id)
+        def gen():
+            for chunk in conv_rag.stream_chat(request.question):
+                yield str(chunk)
+        return StreamingResponse(gen(), media_type="text/plain")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"对话流式失败: {e}")

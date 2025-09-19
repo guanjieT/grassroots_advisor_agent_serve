@@ -2,7 +2,7 @@
 RAG链实现
 包含检索和生成功能
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generator
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
@@ -142,6 +142,20 @@ class RAGChain:
             logger.error(f"RAG链调用失败: {e}")
             return f"抱歉，处理您的问题时出现错误: {str(e)}"
     
+
+    def stream(self, question: str) -> Generator[str, None, None]:
+        """
+        流式输出回答；若底层模型不支持流式，将退化为一次性输出。
+        """
+        try:
+            # 优先使用可流式的链
+            for chunk in self.rag_chain.stream(question):
+                # 确保 chunk 为字符串
+                yield str(chunk)
+        except Exception:
+            # 退化为非流式
+            yield self.invoke(question)
+
     def get_relevant_cases(self, question: str, k: int = 3) -> List[Document]:
         """
         获取相关案例（用于调试和展示）
@@ -288,6 +302,37 @@ class ConversationalRAGChain:
         except Exception as e:
             logger.error(f"对话处理失败: {e}")
             return f"抱歉，处理您的问题时出现了错误: {str(e)}"
+
+    def stream_chat(self, question: str) -> Generator[str, None, None]:
+        """
+        多轮对话模式的流式输出。流期间先缓冲完整回答，结束后再写入历史。
+        """
+        try:
+            # 检索上下文
+            docs = self.retriever.invoke(question)
+            context = self._format_docs(docs)
+            chain_input = {
+                "context": context,
+                "chat_history": self.chat_history,
+                "question": question
+            }
+            full = []
+            chain = (self.conversational_prompt | self.llm | StrOutputParser())
+            for chunk in chain.stream(chain_input):
+                chunk = str(chunk)
+                full.append(chunk)
+                yield chunk
+            # 更新对话历史（在完成后一次性追加，避免在流式中反复变更状态）
+            final_text = "".join(full)
+            self.chat_history.extend([
+                HumanMessage(content=question),
+                AIMessage(content=final_text)
+            ])
+            if len(self.chat_history) > 10:
+                self.chat_history = self.chat_history[-10:]
+        except Exception as e:
+            yield f"抱歉，流式输出时出现错误：{e}"
+
     
     def clear_history(self):
         """清除对话历史"""

@@ -6,7 +6,7 @@ import os
 import json
 import zipfile
 import rarfile
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 import pandas as pd
 from langchain_core.documents import Document
@@ -281,9 +281,11 @@ class RulesProcessor:
             region = self._extract_region_from_path(path_parts)
             
             # 读取文件内容
-            with open(text_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
+            # with open(text_path, 'r', encoding='utf-8') as f:
+            #     content = f.read()
+            content, used_enc, enc_errors = self._read_text_with_fallback(text_path)
+
+
             if content.strip():
                 filename = os.path.basename(text_path)
                 metadata = {
@@ -292,7 +294,9 @@ class RulesProcessor:
                     'region': region,
                     'category': '地方政策',
                     'title': os.path.splitext(filename)[0],
-                    'filename': filename
+                    'filename': filename,
+                    'detected_encoding': used_enc,
+                    'decode_errors': enc_errors
                 }
                 
                 documents.append(Document(
@@ -305,6 +309,24 @@ class RulesProcessor:
         
         return documents
     
+    def _read_text_with_fallback(self, path: str, prefer: Optional[List[str]] = None) -> Tuple[str, str, str]:
+         """
+         尝试多编码读取文本：utf-8/utf-8-sig/gb18030/gbk/cp936/utf-16...，
+         最后兜底 replace/ignore，返回(内容, 使用的编码, 错误处理策略)。
+         """
+         enc_try = prefer or ['utf-8', 'utf-8-sig', 'gb18030', 'gbk', 'cp936', 'utf-16', 'utf-16le', 'utf-16be']
+         data = Path(path).read_bytes()
+         for enc in enc_try:
+             try:
+                 return data.decode(enc), enc, 'strict'
+             except UnicodeDecodeError:
+                 continue
+         # 兜底：尽量保留中文可读性
+         try:
+             return data.decode('gb18030', errors='replace'), 'gb18030', 'replace'
+         except Exception:
+             return data.decode('latin-1', errors='ignore'), 'latin-1', 'ignore'
+
     def _extract_region_from_path(self, path_parts: List[str]) -> str:
         """从路径提取地区信息"""
         for part in path_parts:

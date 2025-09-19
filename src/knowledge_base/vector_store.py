@@ -3,13 +3,14 @@
 使用ChromaDB进行向量存储和检索
 """
 import os
+from tqdm import tqdm
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.vectorstores import VectorStoreRetriever
-from utils.logger import logger
+from src.utils.logger import logger
 from config import config
 
 class VectorStoreManager:
@@ -70,7 +71,12 @@ class VectorStoreManager:
                 return False
             
             # 添加文档
-            self.vectorstore.add_documents(documents)
+            # self.vectorstore.add_documents(documents)
+            batch_size = 100
+            logger.info(f"开始向向量数据库添加 {len(documents)} 个文档，批次大小为 {batch_size}...")
+            for i in tqdm(range(0, len(documents), batch_size), desc="添加文档到向量库"):
+                batch = documents[i:i + batch_size]
+                self.vectorstore.add_documents(batch)
             
             logger.info(f"成功添加 {len(documents)} 个文档到向量数据库")
             return True
@@ -234,8 +240,8 @@ def build_knowledge_base(include_rules: bool = True):
     Args:
         include_rules: 是否包含法规政策数据
     """
-    from knowledge_base.loader import CaseLoader, create_sample_cases
-    from knowledge_base.rules_processor import RulesProcessor
+    from src.knowledge_base.loader import CaseLoader, create_sample_cases
+    from src.knowledge_base.rules_processor import RulesProcessor
     
     try:
         all_documents = []
